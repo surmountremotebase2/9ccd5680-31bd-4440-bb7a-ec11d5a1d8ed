@@ -3,8 +3,13 @@ from surmount.logging import log
 
 class TradingStrategy(Strategy):
     def __init__(self):
+        # Thresholds for all assets
         self.asset_thresholds = {
-            "BBAI": {"stop": 2.5, "target": 4.5},
+            "BBAI": {
+                "avg_cost": 2.59,
+                "scale_up_levels": [4.59, 6.09, 7.59],  # $2, $3.5, $5 above cost
+                "scale_down_levels": [2.20, 2.00, 1.80],  # $0.40, $0.60, $0.80 drop
+            },
             "SOUN": {"stop": 8.0, "target": 12.0},
             "DNN":  {"stop": 1.0, "target": 2.0},
             "NVDA": {"stop": 95.0, "target": 115.0},
@@ -27,37 +32,61 @@ class TradingStrategy(Strategy):
         for asset in self.asset_list:
             try:
                 close = data["ohlcv"][-1][asset]["close"]
-                t = self.asset_thresholds[asset]
-                stop, target = t["stop"], t["target"]
+                log(f"[{asset}] Close: {close}")
 
-                log(f"[{asset}] Price: {close} | Stop: {stop} | Target: {target}")
+                # Slow scale logic for BBAI only
+                if asset == "BBAI":
+                    thresholds = self.asset_thresholds[asset]
+                    allocation = 1.0  # Start fully allocated
 
-                # ↓↓↓ Moderate sell (profit-taking) tiers
-                if close >= target * 1.10:
-                    allocation = 0.25
-                    log(f"[{asset}] Price well above target — trimming to 25%.")
-                elif close >= target:
-                    allocation = 0.5
-                    log(f"[{asset}] Target reached — trimming to 50%.")
-                elif close >= target * 0.90:
-                    allocation = 0.75
-                    log(f"[{asset}] Approaching target — light trim to 75%.")
+                    # Scale out on price increase
+                    if close >= thresholds["scale_up_levels"][2]:
+                        allocation = 0.55
+                        log(f"[{asset}] +$5 above cost — scaling to 55%.")
+                    elif close >= thresholds["scale_up_levels"][1]:
+                        allocation = 0.70
+                        log(f"[{asset}] +$3.5 above cost — scaling to 70%.")
+                    elif close >= thresholds["scale_up_levels"][0]:
+                        allocation = 0.85
+                        log(f"[{asset}] +$2 above cost — scaling to 85%.")
 
-                # ↑↑ Rebuy or hold tiers
-                elif close <= stop * 0.90:
-                    allocation = 0.25
-                    log(f"[{asset}] Sharp drop below stop — rebuying 25%.")
-                elif close <= stop:
-                    allocation = 0.5
-                    log(f"[{asset}] Hit stop — partial sell to 50%.")
-                elif close <= stop * 1.05:
-                    allocation = 0.75
-                    log(f"[{asset}] Mild drop near stop — rebalancing to 75%.")
+                    # Scale down on price drops
+                    elif close <= thresholds["scale_down_levels"][2]:
+                        allocation = 0.55
+                        log(f"[{asset}] Sharp drop — trimming to 55%.")
+                    elif close <= thresholds["scale_down_levels"][1]:
+                        allocation = 0.70
+                        log(f"[{asset}] Moderate drop — trimming to 70%.")
+                    elif close <= thresholds["scale_down_levels"][0]:
+                        allocation = 0.85
+                        log(f"[{asset}] Minor drop — trimming to 85%.")
+
+                    else:
+                        allocation = 1.0  # Hold fully
+
+                    allocation_dict[asset] = allocation
+
+                # Use default logic for other assets
                 else:
-                    allocation = 1.0
-                    log(f"[{asset}] Stable — holding full position.")
+                    t = self.asset_thresholds[asset]
+                    stop, target = t["stop"], t["target"]
 
-                allocation_dict[asset] = allocation
+                    if close >= target * 1.10:
+                        allocation = 0.25
+                    elif close >= target:
+                        allocation = 0.5
+                    elif close >= target * 0.90:
+                        allocation = 0.75
+                    elif close <= stop * 0.90:
+                        allocation = 0.25
+                    elif close <= stop:
+                        allocation = 0.5
+                    elif close <= stop * 1.05:
+                        allocation = 0.75
+                    else:
+                        allocation = 1.0
+
+                    allocation_dict[asset] = allocation
 
             except KeyError:
                 log(f"[{asset}] Missing data — skipping.")
