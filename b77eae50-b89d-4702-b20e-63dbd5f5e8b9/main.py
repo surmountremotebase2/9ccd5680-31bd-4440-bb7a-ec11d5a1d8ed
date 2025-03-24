@@ -4,7 +4,7 @@ from surmount.logging import log
 
 class TradingStrategy(Strategy):
     def __init__(self):
-        self.tickers = ["BBAI", "SOUN", "SKYT"]
+        self.tickers = ["BBAI", "SOUN", "SKYT", "INTC", "PLTR", "NVDA", "AMCR", "GFAI", "DDD", "OPIT", "QBTS"]
         self.entry_prices = {ticker: None for ticker in self.tickers}
         self.sell_flags = {ticker: {10: False, 20: False, 30: False} for ticker in self.tickers}
         self.holdings_core = 0.5
