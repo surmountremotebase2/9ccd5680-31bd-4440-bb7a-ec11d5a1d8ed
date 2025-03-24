@@ -3,19 +3,22 @@ from surmount.logging import log
 
 class TradingStrategy(Strategy):
     def __init__(self):
-        # Define the assets and initial thresholds for stop loss and take profit
-        self.asset_list = ["BBAI", "SOUN", "DNN", "NVDA", "ACMR", "INTC"]
-        self.stop_loss_price = 95.0    # Trigger sell if price drops to this level or below
-        self.take_profit_price = 110.0 # Trigger buy if price rises to this level or above
+        self.asset_thresholds = {
+            "BBAI": {"stop": 2.5, "target": 4.5},
+            "SOUN": {"stop": 8.0, "target": 12.0},
+            "DNN":  {"stop": 1.0, "target": 2.0},
+            "NVDA": {"stop": 95.0, "target": 115.0},
+            "ACMR": {"stop": 20.0, "target": 35.0},
+            "INTC": {"stop": 22.0, "target": 30.0}
+        }
+        self.asset_list = list(self.asset_thresholds.keys())
 
     @property
     def assets(self):
-        # The assets that the strategy will trade
         return self.asset_list
 
     @property
     def interval(self):
-        # The time interval for price checking
         return "1day"
 
     def run(self, data):
@@ -23,22 +26,41 @@ class TradingStrategy(Strategy):
 
         for asset in self.asset_list:
             try:
-                latest_close_price = data["ohlcv"][-1][asset]["close"]
-                log(f"Latest close price of {asset}: {latest_close_price}")
+                close = data["ohlcv"][-1][asset]["close"]
+                t = self.asset_thresholds[asset]
+                stop, target = t["stop"], t["target"]
 
-                if latest_close_price <= self.stop_loss_price:
-                    log(f"Triggering sell for {asset} due to stop loss")
-                    allocation_dict[asset] = 0
+                log(f"[{asset}] Price: {close} | Stop: {stop} | Target: {target}")
 
-                elif latest_close_price >= self.take_profit_price:
-                    log(f"Triggering buy for {asset} due to take profit opportunity")
-                    allocation_dict[asset] = 1
+                # ↓↓↓ Moderate sell (profit-taking) tiers
+                if close >= target * 1.10:
+                    allocation = 0.25
+                    log(f"[{asset}] Price well above target — trimming to 25%.")
+                elif close >= target:
+                    allocation = 0.5
+                    log(f"[{asset}] Target reached — trimming to 50%.")
+                elif close >= target * 0.90:
+                    allocation = 0.75
+                    log(f"[{asset}] Approaching target — light trim to 75%.")
 
+                # ↑↑ Rebuy or hold tiers
+                elif close <= stop * 0.90:
+                    allocation = 0.25
+                    log(f"[{asset}] Sharp drop below stop — rebuying 25%.")
+                elif close <= stop:
+                    allocation = 0.5
+                    log(f"[{asset}] Hit stop — partial sell to 50%.")
+                elif close <= stop * 1.05:
+                    allocation = 0.75
+                    log(f"[{asset}] Mild drop near stop — rebalancing to 75%.")
                 else:
-                    allocation_dict[asset] = 0  # Hold / No position change
+                    allocation = 1.0
+                    log(f"[{asset}] Stable — holding full position.")
+
+                allocation_dict[asset] = allocation
 
             except KeyError:
-                log(f"Data not available for {asset}, skipping.")
-                allocation_dict[asset] = 0  # Safe default
+                log(f"[{asset}] Missing data — skipping.")
+                allocation_dict[asset] = 0
 
         return TargetAllocation(allocation_dict)
