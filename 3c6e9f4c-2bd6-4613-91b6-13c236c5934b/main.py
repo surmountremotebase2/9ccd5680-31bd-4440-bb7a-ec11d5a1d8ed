@@ -3,15 +3,15 @@ from surmount.logging import log
 
 class TradingStrategy(Strategy):
     def __init__(self):
-        # Define the asset and initial thresholds for stop loss and take profit
-        self.asset = "XYZ"
-        self.stop_loss_price = 95.0  # Trigger sell if price drops to this level or below
+        # Define the assets and initial thresholds for stop loss and take profit
+        self.asset_list = ["BBAI", "SOUN", "DNN", "NVDA", "ACMR", "INTC"]
+        self.stop_loss_price = 95.0    # Trigger sell if price drops to this level or below
         self.take_profit_price = 110.0 # Trigger buy if price rises to this level or above
 
     @property
     def assets(self):
         # The assets that the strategy will trade
-        return [self.asset]
+        return self.asset_list
 
     @property
     def interval(self):
@@ -19,22 +19,26 @@ class TradingStrategy(Strategy):
         return "1day"
 
     def run(self, data):
-        # Fetch the latest close price of the asset
-        latest_close_price = data["ohlcv"][-1][self.asset]["close"]
-        log(f"Latest close price of {self.asset}: {latest_close_price}")
+        allocation_dict = {}
 
-        # Default to holding (no change)
-        allocation_dict = {self.asset: 0}
+        for asset in self.asset_list:
+            try:
+                latest_close_price = data["ohlcv"][-1][asset]["close"]
+                log(f"Latest close price of {asset}: {latest_close_price}")
 
-        # If the latest close price is below the stop loss price, trigger a sell by setting allocation to 0
-        if latest_close_price <= self.stop_loss_price:
-            log(f"Triggering sell for {self.asset} due to stop loss")
-            allocation_dict[self.asset] = 0  # Sell all holdings
-            
-        # If the latest close price is above the take profit price, trigger a buy by setting allocation higher
-        elif latest_close_price >= self.take_profit_price:
-            log(f"Triggering buy for {self.asset} due to take profit opportunity")
-            allocation_dict[self.asset] = 1  # Buy or maintain a full position
-        
-        # Return the allocation decision
+                if latest_close_price <= self.stop_loss_price:
+                    log(f"Triggering sell for {asset} due to stop loss")
+                    allocation_dict[asset] = 0
+
+                elif latest_close_price >= self.take_profit_price:
+                    log(f"Triggering buy for {asset} due to take profit opportunity")
+                    allocation_dict[asset] = 1
+
+                else:
+                    allocation_dict[asset] = 0  # Hold / No position change
+
+            except KeyError:
+                log(f"Data not available for {asset}, skipping.")
+                allocation_dict[asset] = 0  # Safe default
+
         return TargetAllocation(allocation_dict)
