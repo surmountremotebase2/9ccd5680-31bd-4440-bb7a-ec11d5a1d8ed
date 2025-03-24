@@ -4,7 +4,7 @@ from surmount.logging import log
 
 class TradingStrategy(Strategy):
     def __init__(self):
-        self.tickers = ["BBAI", "SOUN", "SKYT", "INTC", "PLTR", "NVDA", "AMCR", "GFAI", "DDD", "OPIT", "QBTS"]
+        self.tickers = ["BBAI", "SOUN", "SKYT", "PLTR", "INTC"]
         self.entry_prices = {ticker: None for ticker in self.tickers}
         self.sell_flags = {ticker: {10: False, 20: False, 30: False} for ticker in self.tickers}
         self.holdings_core = 0.5
@@ -24,10 +24,14 @@ class TradingStrategy(Strategy):
         mfi_period = 14
 
         for ticker in self.tickers:
-            current_price = data["ohlcv"][-1][ticker]["close"]
-            rsi_value = RSI(ticker, data["ohlcv"], rsi_period)[-1]
-            mfi_current = MFI(ticker, data["ohlcv"], mfi_period)[-1]
-            mfi_previous = MFI(ticker, data["ohlcv"], mfi_period)[-2]
+            try:
+                current_price = data["ohlcv"][-1][ticker]["close"]
+                rsi_value = RSI(ticker, data["ohlcv"], rsi_period)[-1]
+                mfi_current = MFI(ticker, data["ohlcv"], mfi_period)[-1]
+                mfi_previous = MFI(ticker, data["ohlcv"], mfi_period)[-2]
+            except:
+                log(f"Data missing for {ticker}, skipping.")
+                continue
 
             # Entry or Rebuy Condition
             if rsi_value < 30 and mfi_current > mfi_previous:
